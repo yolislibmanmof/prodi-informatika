@@ -66,7 +66,7 @@ class Database {
         $this->conn = null;
         
         try {
-            $dsn = "mysql:host={$this->host};dbname={$this->db_name};charset={$this->charset}";
+            $dsn = "mysql:host={$this->host};port=" . (defined("DB_PORT") ? (int) DB_PORT : 3306) . ";dbname={$this->db_name};charset={$this->charset}";
             
             // PDO options untuk security dan performance
             $options = [
