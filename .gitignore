@@ -1,5 +1,35 @@
-# Object file
-*.o
+# Environment and secrets
+.env
+.env.*
+!.env.example
 
-# Ada Library Information
-*.ali
+# Runtime data
+/cache/*
+!/cache/.gitkeep
+/logs/*
+!/logs/.gitkeep
+
+# User-uploaded files (keep access-control files)
+uploads/*
+!uploads/.htaccess
+!uploads/.gitkeep
+admin/uploads/*
+!admin/uploads/.htaccess
+!admin/uploads/.gitkeep
+
+# Database exports and local backups
+/database/backup.sql
+/database/backups/
+*.sql.gz
+*.dump
+*.bak
+
+# Editors and operating-system files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+*.log
