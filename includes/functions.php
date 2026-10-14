@@ -97,6 +97,7 @@ function cache($key, $ttl, $callback) {
     
     // Save ke cache
     $cacheData = [
+        'key' => (string)$key,
         'value' => $value,
         'expires' => time() + $ttl,
         'created' => time()
@@ -124,14 +125,15 @@ function cacheForget($key) {
  */
 function cacheForgetPattern($pattern) {
     $cacheDir = __DIR__ . '/../cache';
-    if (!is_dir($cacheDir)) return;
-    
-    $files = glob($cacheDir . '/*.cache');
-    $patternHash = md5($pattern);
-    
-    foreach ($files as $file) {
-        // Simple pattern matching (check apakah filename mengandung pattern hash)
-        if (strpos(basename($file), $patternHash) !== false) {
+    if (!is_dir($cacheDir) || $pattern === '') return;
+
+    foreach (glob($cacheDir . '/*.cache') ?: [] as $file) {
+        $raw = @file_get_contents($file);
+        $entry = $raw === false ? false : @unserialize($raw, ['allowed_classes' => false]);
+
+        // Older cache files have no key metadata: remove them safely during invalidation.
+        $key = is_array($entry) ? ($entry['key'] ?? null) : null;
+        if (!is_string($key) || stripos($key, (string)$pattern) !== false) {
             @unlink($file);
         }
     }
