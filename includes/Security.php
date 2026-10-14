@@ -115,6 +115,12 @@ class Security {
             require_once __DIR__ . '/database.php';
             getDB()->prepare("DELETE FROM remember_tokens WHERE selector = ?")->execute([$selector]);
         } catch (Throwable $e) {}
-        setcookie('ifpro_remember', '', ['expires' => time() - 3600, 'path' => '/']);
+        setcookie('ifpro_remember', '', [
+            'expires'  => time() - 3600,
+            'path'     => '/',
+            'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
     }
 }
