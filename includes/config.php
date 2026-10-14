@@ -70,23 +70,30 @@ if (!function_exists('env')) {
     }
 }
 
-// ===== BACKWARD COMPATIBLE CONSTANTS =====
-// Existing code yang pakai SITE_NAME dan SITE_URL tetap jalan
-
-define('SITE_NAME', env('SITE_NAME', 'Informatika Pro'));
-define('SITE_URL', env('SITE_URL', 'http://localhost/prodi-informatika'));
-
 // ===== APPLICATION CONFIG =====
-define('APP_ENV', env('APP_ENV', 'development')); // development | production
-define('APP_DEBUG', env('APP_DEBUG', true));
+// Production is the safe default; development must be enabled explicitly.
+define('APP_ENV', env('APP_ENV', 'production')); // development | production
+define('APP_DEBUG', env('APP_DEBUG', false));
 define('APP_VERSION', '1.0.0');
+
+// ===== BACKWARD COMPATIBLE CONSTANTS =====
+define('SITE_NAME', env('SITE_NAME', 'Informatika Pro'));
+define('SITE_URL', env('SITE_URL', APP_ENV === 'development' ? 'http://localhost/prodi-informatika' : ''));
 
 // ===== DATABASE CONFIG =====
 define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_NAME', env('DB_NAME', 'prodi-informatika'));
-define('DB_USER', env('DB_USER', 'root'));
+define('DB_USER', env('DB_USER', APP_ENV === 'development' ? 'root' : ''));
 define('DB_PASS', env('DB_PASS', ''));
+define('DB_PORT', env('DB_PORT', 3306));
 define('DB_CHARSET', 'utf8mb4');
+
+// Fail closed when the production configuration has not been provided.
+if (APP_ENV === 'production' && (SITE_URL === '' || DB_USER === '' || DB_PASS === '')) {
+    error_log('Production configuration is incomplete. Check SITE_URL, DB_USER and DB_PASS.');
+    http_response_code(500);
+    exit('Konfigurasi aplikasi belum lengkap. Periksa variabel lingkungan pada server.');
+}
 
 // ===== SESSION CONFIG =====
 define('SESSION_LIFETIME', env('SESSION_LIFETIME', 120)); // dalam menit
