@@ -66,12 +66,9 @@ CREATE TABLE `admins` (
   `last_login_ip` varchar(45) COLLATE utf8mb4_unicode_ci DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
---
--- Dumping data for table `admins`
---
-
-INSERT INTO `admins` (`id`, `username`, `password`, `nama_lengkap`, `email`, `role`, `foto`, `last_login`, `created_at`, `updated_at`, `status`, `two_factor_enabled`, `two_factor_secret`, `failed_attempts`, `locked_until`, `password_changed_at`, `must_change_password`, `last_login_ip`) VALUES
-(1, 'admin', '$2y$10$wqhYkVoVgzc/UHji.VwpZ.nzQqaEobK9tfirwas.QYuIfrxj1J.cG', 'Super Admin', 'admin@informatika.ac.id', 'superadmin', 'default.png', '2026-10-12 15:57:29', '2026-10-11 11:41:49', '2026-10-12 08:57:29', 'aktif', 0, NULL, 0, NULL, NULL, 0, NULL);
+-- No default administrator is inserted here.
+-- After importing this schema and configuring .env, run:
+-- php database/create-admin.php
 
 -- --------------------------------------------------------
 
@@ -1146,7 +1143,7 @@ ALTER TABLE `activity_logs`
 -- AUTO_INCREMENT for table `admins`
 --
 ALTER TABLE `admins`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `agenda`
