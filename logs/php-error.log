@@ -1,0 +1,27 @@
+[14-Oct-2026 08:05:04 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 176
+[14-Oct-2026 08:05:04 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 188
+[14-Oct-2026 08:09:14 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 179
+[14-Oct-2026 08:09:14 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 191
+[14-Oct-2026 08:09:17 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 179
+[14-Oct-2026 08:09:17 Asia/Jakarta] PHP Warning:  Undefined array key "action" in C:\laragon\www\prodi-informatika\admin\berita.php on line 191
+[14-Oct-2026 08:13:20 Asia/Jakarta] Berita cache invalidated by user: admin
+[14-Oct-2026 08:16:09 Asia/Jakarta] Berita cache invalidated by user: admin
+[14-Oct-2026 08:19:27 Asia/Jakarta] Berita cache invalidated by user: admin
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Warning:  Undefined array key "kode" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 57
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Warning:  Undefined array key "nama" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 58
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Warning:  Undefined array key "subjek" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 59
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Warning:  Undefined array key "body" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 60
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Warning:  Undefined array key "status" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 61
+[14-Oct-2026 20:47:38 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Warning:  Undefined array key "kode" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 57
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Warning:  Undefined array key "nama" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 58
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Warning:  Undefined array key "subjek" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 59
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Warning:  Undefined array key "body" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 60
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Warning:  Undefined array key "status" in C:\laragon\www\prodi-informatika\admin\email-templates.php on line 61
+[14-Oct-2026 20:47:43 Asia/Jakarta] PHP Deprecated:  trim(): Passing null to parameter #1 ($string) of type string is deprecated in C:\laragon\www\prodi-informatika\includes\functions.php on line 166

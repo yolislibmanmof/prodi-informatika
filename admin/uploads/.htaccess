@@ -1,0 +1,20 @@
+# Folder upload HANYA untuk file gambar, bukan tempat menjalankan script
+Options -Indexes -ExecCGI
+
+<FilesMatch "(?i)\.(php|phtml|php[3-8]|phar|pl|py|jsp|asp|sh|cgi|htaccess)$">
+  Require all denied
+</FilesMatch>
+
+# Matikan mesin PHP di folder ini (jika Apache memakai mod_php)
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# SVG bisa menyimpan XSS: kunci CSP-nya
+<FilesMatch "(?i)\.svg$">
+  Header set Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'"
+</FilesMatch>
