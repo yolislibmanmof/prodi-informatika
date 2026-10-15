@@ -369,6 +369,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" id="userForm" class="modal-body-ultimate">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             
             <div class="form-grid-2" style="grid-template-columns: 1fr 1fr; gap: 20px;">

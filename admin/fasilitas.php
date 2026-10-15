@@ -17,8 +17,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT gambar FROM fasilitas WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                @unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+            if (!empty($row['gambar'])) {
+                deleteUploadedFile((string)$row['gambar'], 'uploads/fasilitas');
             }
             $db->prepare("DELETE FROM fasilitas WHERE id = ?")->execute([$id]);
             setFlash('success', 'Fasilitas berhasil dihapus');
@@ -33,6 +33,8 @@ if (isset($_GET['action']) && $db) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $nama = clean($_POST['nama']);
         $jenis = clean($_POST['jenis']);
@@ -42,15 +44,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $status = clean($_POST['status'] ?? 'aktif');
         $deskripsi = clean($_POST['deskripsi']);
         
-        $gambar = $_POST['gambar_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'fasilitas', 'gambar', $id) : null;
+        $gambar = $existingImagePath;
         if (!empty($_FILES['gambar']['name'])) {
             $newImage = uploadImage($_FILES['gambar'], 'uploads/fasilitas');
-            if ($newImage) {
-                if ($gambar && file_exists(__DIR__ . '/../' . $gambar)) {
-                    @unlink(__DIR__ . '/../' . $gambar);
-                }
-                $gambar = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi gambar unggahan.');
             }
+            $newImageUploaded = $newImage;
+            $gambar = $newImage;
         }
         
         if ($id) {
@@ -62,7 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$nama, $jenis, $lokasi, $ikon, $kapasitas, $status, $deskripsi, $gambar]);
             setFlash('success', 'Fasilitas baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $gambar) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/fasilitas');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/fasilitas');
+        }
         setFlash('error', 'Gagal menyimpan: ' . $e->getMessage());
     }
     header('Location: fasilitas.php');
@@ -701,6 +712,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="fasilitasForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="gambar_lama" id="gambarLama">
             

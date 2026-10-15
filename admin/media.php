@@ -33,8 +33,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT path FROM media WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['path'] && file_exists(__DIR__ . '/../uploads/' . $row['path'])) {
-                @unlink(__DIR__ . '/../uploads/' . $row['path']);
+            if (!empty($row['path'])) {
+                deleteUploadedFile((string)$row['path']);
             }
             $db->prepare("DELETE FROM media WHERE id = ?")->execute([$id]);
             setFlash('success', 'File media berhasil dihapus');
@@ -54,8 +54,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT path FROM media WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['path'] && file_exists(__DIR__ . '/../uploads/' . $row['path'])) {
-                    @unlink(__DIR__ . '/../uploads/' . $row['path']);
+                if (!empty($row['path'])) {
+                    deleteUploadedFile((string)$row['path']);
                 }
             }
             $db->prepare("DELETE FROM media WHERE id IN ($placeholders)")->execute($ids);
@@ -69,59 +69,71 @@ if (isset($_GET['action']) && $db) {
 }
 
 /* ===== HANDLE UPLOAD ===== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['media_files']) && $db) {
-    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
-    $maxSize = 5 * 1024 * 1024; // 5MB
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_FILES['media_files']) && $db) {
+    // SVG is excluded because active SVG content can execute script on this origin.
+    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    $maxSize = 5 * 1024 * 1024;
     $uploaded = 0;
     $errors = [];
-    
-    foreach ($_FILES['media_files']['tmp_name'] as $key => $tmpName) {
-        if ($_FILES['media_files']['error'][$key] !== UPLOAD_ERR_OK) {
-            $errors[] = "File #" . ($key + 1) . ": Upload error";
+    $files = $_FILES['media_files'];
+
+    foreach (($files['tmp_name'] ?? []) as $key => $tmpName) {
+        $uploadError = (int)($files['error'][$key] ?? UPLOAD_ERR_NO_FILE);
+        if ($uploadError !== UPLOAD_ERR_OK || !is_string($tmpName) || $tmpName === '' || !is_uploaded_file($tmpName)) {
+            $errors[] = 'File #' . ((int)$key + 1) . ': upload tidak valid';
             continue;
         }
-        
-        $filename = $_FILES['media_files']['name'][$key];
-        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-        
-        if (!in_array($ext, $allowed)) {
-            $errors[] = "$filename: Format tidak diizinkan";
+
+        $originalName = basename((string)($files['name'][$key] ?? ''));
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $size = (int)($files['size'][$key] ?? 0);
+        if (!in_array($ext, $allowedExtensions, true)) {
+            $errors[] = $originalName . ': format gambar tidak diizinkan';
             continue;
         }
-        
-        if ($_FILES['media_files']['size'][$key] > $maxSize) {
-            $errors[] = "$filename: Terlalu besar (max 5MB)";
+        if ($size <= 0 || $size > $maxSize) {
+            $errors[] = $originalName . ': ukuran harus 1 byte–5 MB';
             continue;
         }
-        
-        $newName = uniqid('media_') . '.' . $ext;
+
+        $mimeType = UploadValidation::validatedRasterImageMime($tmpName, $ext, $size, $maxSize, 40000000);
+        if ($mimeType === null) {
+            $errors[] = $originalName . ': isi file bukan gambar valid';
+            continue;
+        }
+
+        try {
+            $newName = 'media_' . bin2hex(random_bytes(16)) . '.' . $ext;
+        } catch (Throwable $e) {
+            $errors[] = $originalName . ': pembuatan nama file aman gagal';
+            continue;
+        }
+
         $target = $uploadDir . $newName;
-        
-        if (move_uploaded_file($tmpName, $target)) {
-            $finfo = finfo_open(FILEINFO_MIME_TYPE);
-            $mimeType = finfo_file($finfo, $target);
-            finfo_close($finfo);
-            
-            try {
-                $stmt = $db->prepare("INSERT INTO media (filename, path, mime_type, ukuran, alt_text, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
-                $stmt->execute([
-                    $filename,
-                    'media/' . $newName,
-                    $mimeType,
-                    $_FILES['media_files']['size'][$key],
-                    clean($_POST['alt_text'] ?? ''),
-                    $currentAdminId
-                ]);
-                $uploaded++;
-            } catch (Throwable $e) {
-                @unlink($target);
-                $errors[] = "$filename: Gagal simpan ke database";
-            }
-        } else {
-            $errors[] = "$filename: Gagal upload";
+        if (!move_uploaded_file($tmpName, $target)) {
+            $errors[] = $originalName . ': gagal menyimpan file';
+            continue;
+        }
+        @chmod($target, 0644);
+
+        try {
+            $stmt = $db->prepare("INSERT INTO media (filename, path, mime_type, ukuran, alt_text, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+            $stmt->execute([
+                mb_substr($originalName, 0, 255),
+                'media/' . $newName,
+                $mimeType,
+                $size,
+                mb_substr(trim(strip_tags((string)($_POST['alt_text'] ?? ''))), 0, 255),
+                $currentAdminId
+            ]);
+            $uploaded++;
+        } catch (Throwable $e) {
+            @unlink($target);
+            error_log('Media metadata save failed: ' . $e->getMessage());
+            $errors[] = $originalName . ': gagal menyimpan metadata';
         }
     }
-    
+
     if ($uploaded > 0) {
         setFlash('success', "$uploaded file berhasil diunggah");
     }
@@ -888,6 +900,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="uploadForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="form-sections">
                 <!-- Alt Text -->
                 <div class="form-section">
@@ -3346,7 +3359,7 @@ include 'includes/header.php';
         if (!confirm(`Yakin hapus ${selectedIds.size} file terpilih? File akan dihapus permanen!`)) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=${action}&ids=${ids}`;
+        window.adminSecureAction(`?action=${action}&ids=${ids}`);
     };
 
     /* ===== EXPORT CSV ===== */

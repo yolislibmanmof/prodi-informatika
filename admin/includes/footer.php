@@ -1190,6 +1190,53 @@
         window.open('../index.php', '_blank');
     });
 
+
+    /* ===== Secure mutating GET-style admin links =====
+       Preserve existing routes while submitting state changes with a CSRF token.
+       The matching server-side guard rejects direct, forged GET mutations. */
+    const adminCsrfToken = <?= json_encode(generateCSRF(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    window.adminSecureAction = function (targetUrl) {
+        let target;
+        try { target = new URL(targetUrl, window.location.href); } catch (_) { return; }
+        if (target.origin !== window.location.origin) return;
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = target.pathname + target.search;
+        form.hidden = true;
+        const tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = 'csrf_token';
+        tokenInput.value = adminCsrfToken;
+        form.appendChild(tokenInput);
+        document.body.appendChild(form);
+        form.submit();
+    };
+
+    document.addEventListener('click', function (event) {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        const target = event.target instanceof Element ? event.target : event.target.parentElement;
+        const link = target && target.closest ? target.closest('a[href]') : null;
+        if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+
+        let destination;
+        try { destination = new URL(link.href, window.location.href); } catch (_) { return; }
+        if (destination.origin !== window.location.origin) return;
+
+        // Logout also changes authentication state and must use the same POST token.
+        if (destination.pathname.toLowerCase().endsWith('/logout.php')) {
+            event.preventDefault();
+            window.adminSecureAction(destination.href);
+            return;
+        }
+
+        const action = (destination.searchParams.get('action') || '').toLowerCase();
+        const mutatingAction = /(?:^|[-_])(delete|remove|destroy|toggle|status|duplicate|publish|draft|activate|deactivate|approve|reject|spam|pending|verified|accepted|rejected|revoke|unsubscribe|dibaca|dibalas|clear|reset|disable|enable|feature|hide|show|purge|flush|cleanup|mark|archive|restore|regenerate|generate|send|resend)(?:$|[-_])/.test(action);
+        if (!mutatingAction) return;
+
+        event.preventDefault();
+        window.adminSecureAction(destination.href);
+    });
+
     console.log('%c✅ Footer Ultimate Loaded Successfully', 'color:#10B981;font-weight:bold;font-size:12px');
 })();
 </script>

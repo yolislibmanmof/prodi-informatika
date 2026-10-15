@@ -327,6 +327,7 @@ include 'includes/header.php';
 
             <!-- Bulk Actions Bar -->
             <form method="POST" id="bulkForm">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="bulk-bar" id="bulkBar">
                 <div class="bulk-info">
                     <i class="fas fa-check-circle"></i>
@@ -561,6 +562,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" id="templateForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             
             <div class="form-sections">

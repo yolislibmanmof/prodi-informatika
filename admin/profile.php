@@ -163,6 +163,7 @@ include 'includes/header.php';
                     <h3><i class="fas fa-user-edit"></i> Informasi Profil</h3>
                 </div>
                 <form method="POST" class="pf-card-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="action" value="update_profile">
                     <div class="form-grid-2">
                         <div class="form-group">
@@ -208,6 +209,7 @@ include 'includes/header.php';
                     <h3><i class="fas fa-key"></i> Keamanan Akun</h3>
                 </div>
                 <form method="POST" class="pf-card-body" id="pfPassForm">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="action" value="update_password">
                     <div class="form-grid-2">
                         <div class="form-group" style="grid-column: 1 / -1">

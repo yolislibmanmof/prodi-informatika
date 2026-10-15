@@ -86,7 +86,9 @@ CREATE TABLE `agenda` (
   `tanggal_selesai` datetime DEFAULT NULL,
   `status` enum('akan_datang','berlangsung','selesai','batal') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'akan_datang',
   `gambar` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_featured` tinyint(1) NOT NULL DEFAULT '0',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -115,7 +117,14 @@ CREATE TABLE `alumni` (
   `linkedin` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `quote` text COLLATE utf8mb4_unicode_ci,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `email` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `telepon` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `ipk` decimal(3,2) DEFAULT NULL,
+  `kota` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `instagram` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `is_featured` tinyint(1) NOT NULL DEFAULT '0',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -162,7 +171,10 @@ CREATE TABLE `api_keys` (
   `last_used_at` datetime DEFAULT NULL,
   `expires_at` datetime DEFAULT NULL,
   `status` enum('aktif','dicabut') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `rate_limit` int(10) UNSIGNED NOT NULL DEFAULT 1000,
+  `ip_whitelist` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -251,14 +263,15 @@ CREATE TABLE `comments` (
 CREATE TABLE `dokumen` (
   `id` int(11) UNSIGNED NOT NULL,
   `judul` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `kategori` enum('kurikulum','akademik','kemahasiswaan','sop','lainnya') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'akademik',
+  `kategori` enum('kurikulum','akademik','kemahasiswaan','sop','penelitian','lainnya') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'akademik',
   `filename` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `tipe_file` varchar(10) COLLATE utf8mb4_unicode_ci DEFAULT 'pdf',
   `ukuran` int(11) UNSIGNED DEFAULT NULL,
   `downloads` int(11) UNSIGNED NOT NULL DEFAULT '0',
   `deskripsi` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -296,7 +309,10 @@ CREATE TABLE `dosen` (
   `sinta_id` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `linkedin` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `sambutan` text COLLATE utf8mb4_unicode_ci,
-  `urutan` int(11) NOT NULL DEFAULT '0'
+  `urutan` int(11) NOT NULL DEFAULT '0',
+  `telepon` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `pendidikan` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -341,7 +357,8 @@ CREATE TABLE `email_templates` (
   `subjek` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `body` mediumtext COLLATE utf8mb4_unicode_ci NOT NULL,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -398,7 +415,9 @@ CREATE TABLE `fasilitas` (
   `gambar` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
   `urutan` int(11) NOT NULL DEFAULT '0',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `kapasitas` int(10) UNSIGNED DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -477,7 +496,8 @@ CREATE TABLE `konsentrasi` (
   `warna` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT '#10B981',
   `urutan` int(11) NOT NULL DEFAULT '0',
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -606,7 +626,8 @@ CREATE TABLE `mitra` (
   `deskripsi` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
   `urutan` int(11) NOT NULL DEFAULT '0',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -744,7 +765,8 @@ CREATE TABLE `pengumuman` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `link` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `target` enum('semua','mahasiswa','dosen','staff') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'semua',
-  `is_pinned` tinyint(1) NOT NULL DEFAULT '0'
+  `is_pinned` tinyint(1) NOT NULL DEFAULT '0',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -773,7 +795,8 @@ CREATE TABLE `prestasi` (
   `gambar` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('aktif','nonaktif') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'aktif',
   `urutan` int(11) NOT NULL DEFAULT '0',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

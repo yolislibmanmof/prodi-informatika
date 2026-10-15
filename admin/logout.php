@@ -6,6 +6,18 @@
 require_once __DIR__ . '/../includes/init_security.php';
 require_once __DIR__ . '/../includes/Auth.php';
 
+// Logout changes authentication state; only accept a CSRF-protected POST.
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    exit('Silakan gunakan tombol Keluar dari panel admin.');
+}
+if (!Security::csrfVerify($_POST['csrf_token'] ?? '')) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('Permintaan logout ditolak karena token keamanan tidak valid.');
+}
+
 // Pastikan user memang login sebelum logout
 if (!Auth::check()) {
     header('Location: login.php');

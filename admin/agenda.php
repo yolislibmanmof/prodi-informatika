@@ -23,8 +23,8 @@ if (isset($_GET['action'])) {
             $stmt = $db->prepare("SELECT gambar FROM agenda WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+            if (!empty($row['gambar'])) {
+                deleteUploadedFile((string)$row['gambar'], 'uploads/agenda');
             }
             $db->prepare("DELETE FROM agenda WHERE id = ?")->execute([$id]);
             setFlash('success', 'Agenda berhasil dihapus');
@@ -66,8 +66,8 @@ if (isset($_GET['action'])) {
             $stmt = $db->prepare("SELECT gambar FROM agenda WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                    unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+                if (!empty($row['gambar'])) {
+                    deleteUploadedFile((string)$row['gambar'], 'uploads/agenda');
                 }
             }
             
@@ -100,6 +100,8 @@ if (isset($_GET['action'])) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $judul = clean($_POST['judul']);
         $deskripsi = clean($_POST['deskripsi']);
@@ -110,13 +112,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = clean($_POST['status']);
         $is_featured = isset($_POST['is_featured']) ? 1 : 0;
         
-        $gambar = $_POST['gambar_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'agenda', 'gambar', $id) : null;
+        $gambar = $existingImagePath;
         if (!empty($_FILES['gambar']['name'])) {
             $newImage = uploadImage($_FILES['gambar'], 'uploads/agenda');
-            if ($newImage) {
-                if ($gambar && file_exists(__DIR__ . '/../' . $gambar)) unlink(__DIR__ . '/../' . $gambar);
-                $gambar = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi gambar unggahan.');
             }
+            $newImageUploaded = $newImage;
+            $gambar = $newImage;
         }
         
         if ($id) {
@@ -128,7 +132,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$judul, $deskripsi, $lokasi, $kategori, $tanggal_mulai, $tanggal_selesai, $status, $gambar, $is_featured]);
             setFlash('success', 'Agenda baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $gambar) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/agenda');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/agenda');
+        }
         setFlash('error', 'Gagal menyimpan agenda: ' . $e->getMessage());
     }
     header('Location: agenda.php');
@@ -724,6 +737,7 @@ $todayStr = date('Y-m-d');
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="agendaForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="gambar_lama" id="gambarLama">
             
@@ -3131,7 +3145,7 @@ $todayStr = date('Y-m-d');
         if (!confirm(`Yakin hapus ${selectedIds.size} agenda terpilih?`)) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=bulk-delete&ids=${ids}`;
+        window.adminSecureAction(`?action=bulk-delete&ids=${ids}`);
     };
 
     /* ===== QUICK STATUS CHANGE ===== */
@@ -3139,7 +3153,7 @@ $todayStr = date('Y-m-d');
         if (window.IFPro?.toast) {
             window.IFPro.toast.show('Mengubah status...', 'info');
         }
-        window.location.href = `?action=status&id=${id}&status=${newStatus}`;
+        window.adminSecureAction(`?action=status&id=${id}&status=${newStatus}`);
     };
 
     /* ===== EXPORT CSV (Real Implementation) ===== */
