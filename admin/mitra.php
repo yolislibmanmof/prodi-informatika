@@ -17,8 +17,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT logo FROM mitra WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['logo'] && file_exists(__DIR__ . '/../uploads/' . $row['logo'])) {
-                @unlink(__DIR__ . '/../uploads/' . $row['logo']);
+            if (!empty($row['logo'])) {
+                deleteUploadedFile((string)$row['logo'], 'uploads/mitra');
             }
             $db->prepare("DELETE FROM mitra WHERE id = ?")->execute([$id]);
             setFlash('success', 'Mitra berhasil dihapus');
@@ -38,8 +38,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT logo FROM mitra WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['logo'] && file_exists(__DIR__ . '/../uploads/' . $row['logo'])) {
-                    @unlink(__DIR__ . '/../uploads/' . $row['logo']);
+                if (!empty($row['logo'])) {
+                    deleteUploadedFile((string)$row['logo'], 'uploads/mitra');
                 }
             }
             $db->prepare("DELETE FROM mitra WHERE id IN ($placeholders)")->execute($ids);
@@ -55,6 +55,8 @@ if (isset($_GET['action']) && $db) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $nama = clean($_POST['nama']);
         $jenis = clean($_POST['jenis']);
@@ -62,15 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $deskripsi = clean($_POST['deskripsi']);
         $urutan = (int)($_POST['urutan'] ?? 0);
         
-        $logo = $_POST['logo_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'mitra', 'logo', $id) : null;
+        $logo = $existingImagePath;
         if (!empty($_FILES['logo']['name'])) {
             $newImage = uploadImage($_FILES['logo'], 'uploads/mitra');
-            if ($newImage) {
-                if ($logo && file_exists(__DIR__ . '/../' . $logo)) {
-                    @unlink(__DIR__ . '/../' . $logo);
-                }
-                $logo = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi gambar unggahan.');
             }
+            $newImageUploaded = $newImage;
+            $logo = $newImage;
         }
         
         if ($id) {
@@ -82,7 +84,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$nama, $jenis, $website, $deskripsi, $logo, $urutan]);
             setFlash('success', 'Mitra baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $logo) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/mitra');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/mitra');
+        }
         setFlash('error', 'Gagal menyimpan: ' . $e->getMessage());
     }
     header('Location: mitra.php');
@@ -342,6 +353,7 @@ include 'includes/header.php';
 
             <!-- Bulk Actions Bar -->
             <form method="POST" id="bulkForm">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="bulk-bar" id="bulkBar">
                 <div class="bulk-info">
                     <i class="fas fa-check-circle"></i>
@@ -656,6 +668,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="mitraForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="logo_lama" id="logoLama">
             

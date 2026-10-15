@@ -67,8 +67,8 @@ if (isset($_GET['action']) && $db) {
             }
             
             // Hapus file gambar jika ada
-            if ($berita['gambar'] && file_exists(__DIR__ . '/../uploads/' . $berita['gambar'])) {
-                @unlink(__DIR__ . '/../uploads/' . $berita['gambar']);
+            if (!empty($berita['gambar'])) {
+                deleteUploadedFile((string)$berita['gambar'], 'uploads/berita');
             }
             
             // Delete dari database
@@ -146,8 +146,8 @@ if (isset($_GET['action']) && $db) {
                 
                 // Delete files
                 foreach ($deletedBerita as $row) {
-                    if ($row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                        @unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+                    if (!empty($row['gambar'])) {
+                        deleteUploadedFile((string)$row['gambar'], 'uploads/berita');
                     }
                 }
                 
@@ -210,8 +210,8 @@ if (isset($_GET['action']) && $db) {
                 $stmt = $db->prepare("SELECT gambar FROM berita WHERE id IN ($placeholders)");
                 $stmt->execute($ids);
                 foreach ($stmt->fetchAll() as $row) {
-                    if ($row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                        @unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+                    if (!empty($row['gambar'])) {
+                        deleteUploadedFile((string)$row['gambar'], 'uploads/berita');
                     }
                 }
                 $db->prepare("DELETE FROM berita WHERE id IN ($placeholders)")->execute($ids);
@@ -242,6 +242,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     }
     
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $judul = clean($_POST['judul']);
         $slug = !empty($_POST['slug']) ? clean($_POST['slug']) : generateSlug($judul);
@@ -273,25 +275,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         }
         
         // ===== UPLOAD GAMBAR =====
-        $gambar = $_POST['gambar_lama'] ?? null;
-        
+        $existingImagePath = $id ? getExistingUploadPath($db, 'berita', 'gambar', $id) : null;
+        $gambar = $existingImagePath;
         if (!empty($_FILES['gambar']['name'])) {
             $newImage = uploadImage($_FILES['gambar'], 'uploads/berita');
-            
-            if ($newImage) {
-                // Delete old image jika ada
-                if ($gambar && file_exists(__DIR__ . '/../' . $gambar)) {
-                    @unlink(__DIR__ . '/../' . $gambar);
-                }
-                $gambar = $newImage;
-            } else {
-                setFlash('error', 'Gagal upload gambar. Pastikan format dan ukuran sesuai.');
-                header('Location: berita.php');
-                exit;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi gambar unggahan.');
             }
+            $newImageUploaded = $newImage;
+            $gambar = $newImage;
         }
-        
-        // ===== SAVE TO DATABASE =====
+
         if ($id) {
             // ===== UPDATE BERITA =====
             $stmt = $db->prepare("UPDATE berita SET judul=?, slug=?, kategori=?, tags=?, ringkasan=?, konten=?, gambar=?, status=?, is_featured=?, published_at=?, updated_at=NOW() WHERE id=?");
@@ -312,6 +306,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $logMessage = "Created: $judul (ID: $id)";
         }
         
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $gambar) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/berita');
+            }
+            $newImageUploaded = null; // File baru sekarang sudah direferensikan oleh database.
+        }
+
         // ===== INVALIDATE CACHE =====
         invalidateBeritaCache();
         
@@ -321,6 +322,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         setFlash('success', $message);
         
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/berita');
+        }
         setFlash('error', 'Gagal menyimpan berita: ' . $e->getMessage());
         
         // Log error untuk debugging
@@ -4854,7 +4858,7 @@ Tips:
         if (!confirm(messages[action])) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=${action}&ids=${ids}`;
+        window.adminSecureAction(`?action=${action}&ids=${ids}`);
     };
 
     /* ===== EXPORT CSV ===== */

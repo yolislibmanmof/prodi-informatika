@@ -40,21 +40,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $stmt = $db->prepare("INSERT INTO pengaturan (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?");
         $stmt->execute(['maintenance_mode', $maintValue, $maintValue]);
 
-        // Handle Files
+        // Handle image settings with validated uploads and safe replace ordering.
+        // Keep the old asset in place until the database points to the new file.
         $fileSettings = ['logo', 'favicon', 'kaprodi_foto'];
         foreach ($fileSettings as $key) {
-            if (!empty($_FILES[$key]['name'])) {
-                $folder = $key === 'favicon' ? 'uploads' : 'uploads/settings';
-                $newFile = uploadImage($_FILES[$key], $folder);
-                if ($newFile) {
-                    $oldValue = $settingsData[$key] ?? '';
-                    if ($oldValue && file_exists(__DIR__ . '/../' . $oldValue)) {
-                        unlink(__DIR__ . '/../' . $oldValue);
-                    }
-                    $stmt = $db->prepare("INSERT INTO pengaturan (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?");
-                    $stmt->execute([$key, $newFile, $newFile]);
-                    $settingsData[$key] = $newFile;
-                }
+            if (empty($_FILES[$key]['name'])) {
+                continue;
+            }
+
+            $folder = $key === 'favicon' ? 'uploads' : 'uploads/settings';
+            $newFile = uploadImage($_FILES[$key], $folder);
+            if (!$newFile) {
+                throw new RuntimeException('Gagal memvalidasi file pengaturan: ' . $key);
+            }
+
+            $oldValue = (string)($settingsData[$key] ?? '');
+            try {
+                $stmt = $db->prepare("INSERT INTO pengaturan (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?");
+                $stmt->execute([$key, $newFile, $newFile]);
+            } catch (Throwable $saveError) {
+                deleteUploadedFile((string)$newFile, $folder);
+                throw $saveError;
+            }
+
+            $settingsData[$key] = $newFile;
+            if ($oldValue !== '' && $oldValue !== $newFile) {
+                deleteUploadedFile($oldValue, $folder);
             }
         }
         
@@ -102,6 +113,7 @@ include 'includes/header.php';
     <?php endif; ?>
 
     <form method="POST" enctype="multipart/form-data" id="settingsForm" class="settings-form-ultimate">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
         
         <!-- Tabs Navigation -->
         <div class="settings-tabs-ultimate">

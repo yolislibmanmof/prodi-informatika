@@ -17,8 +17,8 @@ if (isset($_GET['action']) && isset($_GET['id']) && $db) {
             $stmt = $db->prepare("SELECT avatar FROM testimoni WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['avatar'] && strpos($row['avatar'], 'http') !== 0 && file_exists(__DIR__ . '/../' . $row['avatar'])) {
-                unlink(__DIR__ . '/../' . $row['avatar']);
+            if (!empty($row['avatar'])) {
+                deleteUploadedFile((string)$row['avatar'], 'uploads/testimoni');
             }
             $db->prepare("DELETE FROM testimoni WHERE id = ?")->execute([$id]);
             setFlash('success', 'Testimoni berhasil dihapus');
@@ -42,15 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $urutan = (int)($_POST['urutan'] ?: 0);
         $status = clean($_POST['status']);
         
-        $avatar = $_POST['avatar_lama'] ?? 'https://i.pravatar.cc/150?img=12';
+        $newImageUploaded = null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'testimoni', 'avatar', $id) : null;
+        $avatar = $existingImagePath ?: 'https://i.pravatar.cc/150?img=12';
         if (!empty($_FILES['avatar']['name'])) {
             $newImage = uploadImage($_FILES['avatar'], 'uploads/testimoni');
-            if ($newImage) {
-                if ($avatar && strpos($avatar, 'http') !== 0 && file_exists(__DIR__ . '/../' . $avatar)) {
-                    unlink(__DIR__ . '/../' . $avatar);
-                }
-                $avatar = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi avatar testimoni.');
             }
+            $newImageUploaded = $newImage;
+            $avatar = $newImage;
         }
         
         if ($id) {
@@ -62,7 +63,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$nama, $tahun_masuk, $avatar, $quote, $urutan, $status]);
             setFlash('success', 'Testimoni baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $avatar) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/testimoni');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/testimoni');
+        }
         setFlash('error', 'Gagal menyimpan data: ' . $e->getMessage());
     }
     header('Location: testimoni.php'); exit;
@@ -333,6 +343,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="testimoniForm" class="modal-body-ultimate">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="avatar_lama" id="avatarLama">
             

@@ -858,6 +858,7 @@ function getLastUsed($keyId) {
         </div>
         
         <form method="POST" id="generateForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="form-steps">
                 <div class="step-indicator">
                     <div class="step active" data-step="1">

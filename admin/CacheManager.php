@@ -44,7 +44,7 @@ class CacheManager {
         if (file_exists($cacheFile)) {
             $data = @file_get_contents($cacheFile);
             if ($data !== false) {
-                $cached = @unserialize($data);
+                $cached = @unserialize($data, ['allowed_classes' => false]);
                 
                 if ($cached !== false && 
                     isset($cached['expires']) && 
@@ -141,7 +141,7 @@ class CacheManager {
             $totalFiles++;
             $totalSize += filesize($file);
             
-            $data = @unserialize(@file_get_contents($file));
+            $data = @unserialize(@file_get_contents($file), ['allowed_classes' => false]);
             if ($data && isset($data['expires']) && $data['expires'] < time()) {
                 $expired++;
             }
@@ -163,7 +163,7 @@ class CacheManager {
         $removed = 0;
         
         foreach ($files as $file) {
-            $data = @unserialize(@file_get_contents($file));
+            $data = @unserialize(@file_get_contents($file), ['allowed_classes' => false]);
             
             if ($data && isset($data['expires']) && $data['expires'] < time()) {
                 @unlink($file);

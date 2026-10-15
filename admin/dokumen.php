@@ -46,6 +46,29 @@ function formatSize($bytes) {
     return round($bytes/(1024*1024*1024), 2) . ' GB';
 }
 
+/**
+ * Resolve only an existing file directly inside the document upload directory.
+ * Database values and hidden form fields are never treated as arbitrary filesystem paths.
+ */
+function safeDocumentFilePath($uploadDir, $filename) {
+    if (!is_string($filename) || $filename === '' || $filename === '.' || $filename === '..'
+        || $filename !== basename($filename)
+        || strpos($filename, '/') !== false
+        || strpos($filename, chr(92)) !== false
+        || preg_match('/[\x00-\x1F]/', $filename)) {
+        return null;
+    }
+    $base = realpath($uploadDir);
+    if ($base === false) {
+        return null;
+    }
+    $path = realpath($base . DIRECTORY_SEPARATOR . $filename);
+    if ($path === false || dirname($path) !== $base || !is_file($path)) {
+        return null;
+    }
+    return $path;
+}
+
 /* ===== HANDLE ACTIONS ===== */
 if (isset($_GET['action']) && $db) {
     $id = (int)($_GET['id'] ?? 0);
@@ -55,8 +78,11 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT filename FROM dokumen WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['filename'] && file_exists($uploadDir . $row['filename'])) {
-                @unlink($uploadDir . $row['filename']);
+            if ($row && !empty($row['filename'])) {
+                $safePath = safeDocumentFilePath($uploadDir, (string)$row['filename']);
+                if ($safePath !== null) {
+                    @unlink($safePath);
+                }
             }
             $db->prepare("DELETE FROM dokumen WHERE id = ?")->execute([$id]);
             setFlash('success', 'Dokumen berhasil dihapus');
@@ -76,8 +102,11 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT filename FROM dokumen WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['filename'] && file_exists($uploadDir . $row['filename'])) {
-                    @unlink($uploadDir . $row['filename']);
+                if (!empty($row['filename'])) {
+                    $safePath = safeDocumentFilePath($uploadDir, (string)$row['filename']);
+                    if ($safePath !== null) {
+                        @unlink($safePath);
+                    }
                 }
             }
             $db->prepare("DELETE FROM dokumen WHERE id IN ($placeholders)")->execute($ids);
@@ -91,59 +120,86 @@ if (isset($_GET['action']) && $db) {
 }
 
 /* ===== HANDLE FORM SUBMIT ===== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $db) {
+    $newUploadPath = null;
+    $oldUploadPath = null;
     try {
-        $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
-        $judul = clean($_POST['judul']);
-        $kategori = clean($_POST['kategori']);
-        $deskripsi = clean($_POST['deskripsi'] ?? '');
-        $filename_lama = $_POST['filename_lama'] ?? null;
-        
-        $filename = $filename_lama;
-        $tipe_file = $filename_lama ? pathinfo($filename_lama, PATHINFO_EXTENSION) : '';
-        $ukuran = 0;
-        
-        // Get existing file size if not uploading new
-        if ($id && !$filename) {
-            $st = $db->prepare("SELECT ukuran, tipe_file FROM dokumen WHERE id = ?");
-            $st->execute([$id]);
-            $existing = $st->fetch();
-            if ($existing) {
-                $ukuran = $existing['ukuran'];
-                $tipe_file = $existing['tipe_file'];
+        $id = !empty($_POST['id']) ? (int)$_POST['id'] : null;
+        $judul = trim((string)($_POST['judul'] ?? ''));
+        $kategori = (string)($_POST['kategori'] ?? 'akademik');
+        $deskripsi = trim((string)($_POST['deskripsi'] ?? ''));
+
+        if ($judul === '') {
+            throw new RuntimeException('Judul dokumen wajib diisi.');
+        }
+        if (!array_key_exists($kategori, $categories)) {
+            throw new RuntimeException('Kategori dokumen tidak valid.');
+        }
+
+        // Trust the database for an existing file, never the editable hidden filename field.
+        $existing = null;
+        if ($id !== null) {
+            $lookup = $db->prepare('SELECT id, filename, tipe_file, ukuran FROM dokumen WHERE id = ? LIMIT 1');
+            $lookup->execute([$id]);
+            $existing = $lookup->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) {
+                throw new RuntimeException('Dokumen yang akan diperbarui tidak ditemukan.');
             }
         }
 
-        if (!empty($_FILES['file_dokumen']['name'])) {
-            $allowed = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'zip', 'rar'];
-            $ext = strtolower(pathinfo($_FILES['file_dokumen']['name'], PATHINFO_EXTENSION));
-            
-            if (!in_array($ext, $allowed)) {
-                throw new Exception('Format file tidak diizinkan');
+        $filename = $existing['filename'] ?? null;
+        $tipe_file = (string)($existing['tipe_file'] ?? '');
+        $ukuran = (int)($existing['ukuran'] ?? 0);
+        $hasNewUpload = isset($_FILES['file_dokumen'])
+            && (int)($_FILES['file_dokumen']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+
+        if ($hasNewUpload) {
+            $upload = $_FILES['file_dokumen'];
+            if ((int)($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                || empty($upload['tmp_name'])
+                || !is_uploaded_file((string)$upload['tmp_name'])) {
+                throw new RuntimeException('Upload dokumen tidak valid.');
             }
-            
-            if ($_FILES['file_dokumen']['size'] > 20 * 1024 * 1024) {
-                throw new Exception('Ukuran file maksimal 20MB');
+
+            $allowedExtensions = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'zip', 'rar'];
+            $ext = strtolower(pathinfo(basename((string)($upload['name'] ?? '')), PATHINFO_EXTENSION));
+            $size = (int)($upload['size'] ?? 0);
+            if (!in_array($ext, $allowedExtensions, true)) {
+                throw new RuntimeException('Format dokumen tidak diizinkan.');
             }
-            
-            $tipe_file = $ext;
-            $ukuran = $_FILES['file_dokumen']['size'];
-            $newName = uniqid('doc_') . '.' . $ext;
+            if ($size <= 0 || $size > 20 * 1024 * 1024) {
+                throw new RuntimeException('Ukuran dokumen harus 1 byte–20 MB.');
+            }
+            if (!UploadValidation::isValidDocumentFile((string)$upload['tmp_name'], $ext, $size, 20 * 1024 * 1024)) {
+                throw new RuntimeException('Isi dokumen tidak sesuai dengan ekstensi atau tanda tangan file.');
+            }
+
+            if (!is_dir($uploadDir) || !is_writable($uploadDir)) {
+                throw new RuntimeException('Direktori penyimpanan dokumen tidak siap.');
+            }
+            try {
+                $newName = 'doc_' . bin2hex(random_bytes(16)) . '.' . $ext;
+            } catch (Throwable $e) {
+                throw new RuntimeException('Gagal membuat nama file yang aman.');
+            }
             $target = $uploadDir . $newName;
-            
-            if (move_uploaded_file($_FILES['file_dokumen']['tmp_name'], $target)) {
-                if ($filename_lama && file_exists($uploadDir . $filename_lama)) {
-                    @unlink($uploadDir . $filename_lama);
-                }
-                $filename = $newName;
-            } else {
-                throw new Exception('Gagal mengunggah file');
+            if (!move_uploaded_file((string)$upload['tmp_name'], $target)) {
+                throw new RuntimeException('Gagal menyimpan dokumen yang diunggah.');
             }
-        } elseif (!$id && empty($filename)) {
-            throw new Exception('File dokumen wajib diunggah untuk data baru');
+            @chmod($target, 0644);
+            $newUploadPath = $target;
+
+            if ($existing && !empty($existing['filename'])) {
+                $oldUploadPath = safeDocumentFilePath($uploadDir, (string)$existing['filename']);
+            }
+            $filename = $newName;
+            $tipe_file = $ext;
+            $ukuran = $size;
+        } elseif ($id === null || empty($filename)) {
+            throw new RuntimeException('File dokumen wajib diunggah untuk data baru.');
         }
 
-        if ($id) {
+        if ($id !== null) {
             $stmt = $db->prepare("UPDATE dokumen SET judul=?, kategori=?, filename=?, tipe_file=?, ukuran=?, deskripsi=?, updated_at=NOW() WHERE id=?");
             $stmt->execute([$judul, $kategori, $filename, $tipe_file, $ukuran, $deskripsi, $id]);
             setFlash('success', 'Dokumen berhasil diperbarui');
@@ -152,8 +208,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$judul, $kategori, $filename, $tipe_file, $ukuran, $deskripsi]);
             setFlash('success', 'Dokumen baru berhasil diunggah');
         }
+
+        // Delete replaced file only after metadata was saved successfully.
+        if ($oldUploadPath !== null && $newUploadPath !== null && $oldUploadPath !== $newUploadPath) {
+            @unlink($oldUploadPath);
+        }
+        $newUploadPath = null; // Keep successfully referenced file.
     } catch (Throwable $e) {
-        setFlash('error', 'Gagal menyimpan: ' . $e->getMessage());
+        if ($newUploadPath !== null && is_file($newUploadPath)) {
+            @unlink($newUploadPath);
+        }
+        error_log('Document save failed: ' . $e->getMessage());
+        setFlash('error', 'Gagal menyimpan dokumen. Periksa format, ukuran, dan data lalu coba lagi.');
     }
     header('Location: dokumen.php');
     exit;
@@ -937,6 +1003,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="dokumenForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="filename_lama" id="filenameLama">
             
@@ -3384,7 +3451,7 @@ include 'includes/header.php';
         if (!confirm(messages[action])) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=${action}&ids=${ids}`;
+        window.adminSecureAction(`?action=${action}&ids=${ids}`);
     };
 
     window.bulkDownload = function() {

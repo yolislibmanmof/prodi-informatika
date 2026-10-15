@@ -832,7 +832,7 @@ include 'includes/header.php';
             'bulk-dibalas': `Tandai ${selectedIds.size} pesan telah dibalas?`
         };
         if (!confirm(messages[action])) return;
-        window.location.href = `?action=${action}&ids=${Array.from(selectedIds).join(',')}`;
+        window.adminSecureAction(`?action=${action}&ids=${Array.from(selectedIds).join(',')}`);
     };
 
     // Auto-dismiss alerts

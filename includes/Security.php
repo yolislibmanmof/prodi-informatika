@@ -4,15 +4,10 @@
  */
 class Security {
 
-    /** IP asli pengunjung (dukung Cloudflare/proxy) */
+    /** IP peer langsung; forwarded headers hanya aman jika proxy tepercaya dikonfigurasi. */
     public static function clientIP() {
-        foreach (['HTTP_CF_CONNECTING_IP','HTTP_X_FORWARDED_FOR','HTTP_X_REAL_IP','REMOTE_ADDR'] as $k) {
-            if (!empty($_SERVER[$k])) {
-                $ip = trim(explode(',', $_SERVER[$k])[0]);
-                if (filter_var($ip, FILTER_VALIDATE_IP)) return $ip;
-            }
-        }
-        return '0.0.0.0';
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
     }
 
     /** Token CSRF (ambil / buat) */

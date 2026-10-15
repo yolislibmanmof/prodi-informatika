@@ -612,6 +612,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" id="konsentrasiForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             
             <div class="form-sections">

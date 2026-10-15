@@ -1,0 +1,88 @@
+name: PHP and MySQL quality checks
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php-and-database:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: prodi_informatika
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: prodi_informatika
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mbstring, pdo_mysql, fileinfo
+          coverage: none
+
+      - name: Lint every PHP file
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -type f -name '*.php' -not -path './.git/*' -print0 | xargs -0 -n1 php -l
+          
+      - name: Import canonical MySQL schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" --default-character-set=utf8mb4 "$MYSQL_DATABASE" < database/schema.sql
+
+      - name: Verify migration is safe to rerun
+        shell: bash
+        run: |
+          set -euo pipefail
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" "$MYSQL_DATABASE" < database/migrations/20261015_admin_crud_schema_compat.sql
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" "$MYSQL_DATABASE" < database/migrations/20261015_admin_crud_schema_compat.sql
+
+      - name: Test migration against a legacy database schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS prodi_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" prodi_legacy < tests/legacy_schema.sql
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" prodi_legacy < database/migrations/20261015_admin_crud_schema_compat.sql
+          mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" prodi_legacy < database/migrations/20261015_admin_crud_schema_compat.sql
+          actual="$(mysql --host="$MYSQL_HOST" --port="$MYSQL_PORT" --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" --batch --skip-column-names prodi_legacy -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'prodi_legacy' AND ((TABLE_NAME = 'agenda' AND COLUMN_NAME IN ('is_featured','updated_at')) OR (TABLE_NAME = 'pengumuman' AND COLUMN_NAME = 'updated_at') OR (TABLE_NAME = 'dosen' AND COLUMN_NAME IN ('telepon','pendidikan','updated_at')) OR (TABLE_NAME = 'fasilitas' AND COLUMN_NAME IN ('kapasitas','updated_at')) OR (TABLE_NAME IN ('konsentrasi','prestasi','mitra','dokumen') AND COLUMN_NAME = 'updated_at') OR (TABLE_NAME = 'alumni' AND COLUMN_NAME IN ('email','telepon','ipk','kota','instagram','is_featured','updated_at')) OR (TABLE_NAME = 'api_keys' AND COLUMN_NAME IN ('rate_limit','ip_whitelist','updated_at')) OR (TABLE_NAME = 'email_templates' AND COLUMN_NAME = 'created_at'))")"
+          test "$actual" -eq 23
+
+      - name: Run security and schema contract checks
+        run: php tests/security_contract.php
+
+      - name: Run upload validation unit tests
+        run: php tests/upload_validation.php
+
+      - name: Run upload path security tests
+        run: php tests/upload_path_security.php
+
+      - name: Run MySQL CRUD smoke tests
+        run: php tests/database_smoke.php
+
+      - name: Run admin-to-public visibility smoke tests
+        run: php tests/public_sync_smoke.php

@@ -17,8 +17,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT gambar FROM prestasi WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                @unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+            if (!empty($row['gambar'])) {
+                deleteUploadedFile((string)$row['gambar'], 'uploads/prestasi');
             }
             $db->prepare("DELETE FROM prestasi WHERE id = ?")->execute([$id]);
             setFlash('success', 'Prestasi berhasil dihapus');
@@ -38,8 +38,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT gambar FROM prestasi WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['gambar'] && file_exists(__DIR__ . '/../uploads/' . $row['gambar'])) {
-                    @unlink(__DIR__ . '/../uploads/' . $row['gambar']);
+                if (!empty($row['gambar'])) {
+                    deleteUploadedFile((string)$row['gambar'], 'uploads/prestasi');
                 }
             }
             $db->prepare("DELETE FROM prestasi WHERE id IN ($placeholders)")->execute($ids);
@@ -55,6 +55,8 @@ if (isset($_GET['action']) && $db) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $judul = clean($_POST['judul']);
         $pencapaian = clean($_POST['pencapaian']);
@@ -65,15 +67,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $deskripsi = clean($_POST['deskripsi']);
         $urutan = (int)($_POST['urutan'] ?? 0);
         
-        $gambar = $_POST['gambar_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'prestasi', 'gambar', $id) : null;
+        $gambar = $existingImagePath;
         if (!empty($_FILES['gambar']['name'])) {
             $newImage = uploadImage($_FILES['gambar'], 'uploads/prestasi');
-            if ($newImage) {
-                if ($gambar && file_exists(__DIR__ . '/../' . $gambar)) {
-                    @unlink(__DIR__ . '/../' . $gambar);
-                }
-                $gambar = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi gambar unggahan.');
             }
+            $newImageUploaded = $newImage;
+            $gambar = $newImage;
         }
         
         if ($id) {
@@ -85,7 +87,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$judul, $pencapaian, $kategori, $tingkat, $nama_tim, $tahun, $deskripsi, $gambar, $urutan]);
             setFlash('success', 'Prestasi baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $gambar) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/prestasi');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/prestasi');
+        }
         setFlash('error', 'Gagal menyimpan: ' . $e->getMessage());
     }
     header('Location: prestasi.php');
@@ -353,6 +364,7 @@ include 'includes/header.php';
 
             <!-- Bulk Actions Bar -->
             <form method="POST" id="bulkForm">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="bulk-bar" id="bulkBar">
                 <div class="bulk-info">
                     <i class="fas fa-check-circle"></i>
@@ -681,6 +693,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="prestasiForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="gambar_lama" id="gambarLama">
             

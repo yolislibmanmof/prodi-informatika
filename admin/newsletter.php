@@ -306,6 +306,7 @@ include 'includes/header.php';
 
             <!-- Bulk Actions Bar -->
             <form method="POST" action="?action=bulk_delete" id="bulkForm">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <div class="bulk-bar" id="bulkBar">
                 <div class="bulk-info">
                     <i class="fas fa-check-circle"></i>

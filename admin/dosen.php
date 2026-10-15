@@ -19,8 +19,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT foto FROM dosen WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['foto'] && file_exists(__DIR__ . '/../uploads/' . $row['foto'])) {
-                @unlink(__DIR__ . '/../uploads/' . $row['foto']);
+            if (!empty($row['foto'])) {
+                deleteUploadedFile((string)$row['foto'], 'uploads/dosen');
             }
             $db->prepare("DELETE FROM dosen WHERE id = ?")->execute([$id]);
             setFlash('success', 'Dosen berhasil dihapus');
@@ -52,8 +52,8 @@ if (isset($_GET['action']) && $db) {
                 $stmt = $db->prepare("SELECT foto FROM dosen WHERE id IN ($placeholders)");
                 $stmt->execute($ids);
                 foreach ($stmt->fetchAll() as $row) {
-                    if ($row['foto'] && file_exists(__DIR__ . '/../uploads/' . $row['foto'])) {
-                        @unlink(__DIR__ . '/../uploads/' . $row['foto']);
+                    if (!empty($row['foto'])) {
+                        deleteUploadedFile((string)$row['foto'], 'uploads/dosen');
                     }
                 }
                 $db->prepare("DELETE FROM dosen WHERE id IN ($placeholders)")->execute($ids);
@@ -76,6 +76,8 @@ if (isset($_GET['action']) && $db) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $nidn = clean($_POST['nidn']);
         $nama = clean($_POST['nama']);
@@ -93,27 +95,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $status = clean($_POST['status'] ?? 'aktif');
         
         // Upload foto
-        $foto = $_POST['foto_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'dosen', 'foto', $id) : null;
+        $foto = $existingImagePath;
         if (!empty($_FILES['foto']['name'])) {
             $newImage = uploadImage($_FILES['foto'], 'uploads/dosen');
-            if ($newImage) {
-                if ($foto && file_exists(__DIR__ . '/../' . $foto)) {
-                    @unlink(__DIR__ . '/../' . $foto);
-                }
-                $foto = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi foto dosen.');
             }
+            $newImageUploaded = $newImage;
+            $foto = $newImage;
         }
         
         if ($id) {
-            $stmt = $db->prepare("UPDATE dosen SET nidn=?, nama=?, gelar=?, keahlian=?, email=?, telepon=?, pendidikan=?, jabatan_fungsional=?, sinta_id=?, google_scholar=?, foto=?, profil=?, status=?, updated_at=NOW() WHERE id=?");
-            $stmt->execute([$nidn, $nama, $gelar, $keahlian, $email, $telepon, $pendidikan, $jabatan_fungsional, $sinta_id, $google_scholar, $foto, $profil, $status, $id]);
+            $stmt = $db->prepare("UPDATE dosen SET nidn=?, nama=?, gelar=?, keahlian=?, email=?, telepon=?, pendidikan=?, pendidikan_terakhir=?, jabatan_fungsional=?, sinta_id=?, google_scholar=?, foto=?, profil=?, status=?, updated_at=NOW() WHERE id=?");
+            $stmt->execute([$nidn, $nama, $gelar, $keahlian, $email, $telepon, $pendidikan, $pendidikan, $jabatan_fungsional, $sinta_id, $google_scholar, $foto, $profil, $status, $id]);
             setFlash('success', 'Data dosen berhasil diperbarui');
         } else {
-            $stmt = $db->prepare("INSERT INTO dosen (nidn, nama, gelar, keahlian, email, telepon, pendidikan, jabatan_fungsional, sinta_id, google_scholar, foto, profil, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
-            $stmt->execute([$nidn, $nama, $gelar, $keahlian, $email, $telepon, $pendidikan, $jabatan_fungsional, $sinta_id, $google_scholar, $foto, $profil, $status]);
+            $stmt = $db->prepare("INSERT INTO dosen (nidn, nama, gelar, keahlian, email, telepon, pendidikan, pendidikan_terakhir, jabatan_fungsional, sinta_id, google_scholar, foto, profil, status, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+            $stmt->execute([$nidn, $nama, $gelar, $keahlian, $email, $telepon, $pendidikan, $pendidikan, $jabatan_fungsional, $sinta_id, $google_scholar, $foto, $profil, $status]);
             setFlash('success', 'Dosen baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $foto) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/dosen');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/dosen');
+        }
         setFlash('error', 'Gagal menyimpan data: ' . $e->getMessage());
     }
     header('Location: dosen.php');
@@ -1058,6 +1069,7 @@ include 'includes/header.php';
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="dosenForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="foto_lama" id="fotoLama">
             
@@ -3556,7 +3568,7 @@ include 'includes/header.php';
         if (!confirm(messages[action])) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=${action}&ids=${ids}`;
+        window.adminSecureAction(`?action=${action}&ids=${ids}`);
     };
 
     /* ===== EXPORT CSV ===== */

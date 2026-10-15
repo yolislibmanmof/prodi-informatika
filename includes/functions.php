@@ -14,6 +14,7 @@
 if (!function_exists('getDB')) {
     require_once __DIR__ . '/database.php';
 }
+require_once __DIR__ . '/UploadValidation.php';
 
 /* ============================================================
    1. SESSION & FLASH MESSAGES
@@ -83,7 +84,7 @@ function cache($key, $ttl, $callback) {
     if (file_exists($cacheFile)) {
         $cacheData = @file_get_contents($cacheFile);
         if ($cacheData !== false) {
-            $data = @unserialize($cacheData);
+            $data = @unserialize($cacheData, ['allowed_classes' => false]);
             
             // Check apakah data valid dan belum expired
             if ($data !== false && isset($data['expires']) && $data['expires'] > time()) {
@@ -147,8 +148,13 @@ function cacheFlush() {
     if (!is_dir($cacheDir)) return;
     
     $files = glob($cacheDir . '/*.cache');
+    if ($files === false) {
+        return;
+    }
     foreach ($files as $file) {
-        @unlink($file);
+        if (is_file($file)) {
+            @unlink($file);
+        }
     }
 }
 
@@ -430,85 +436,101 @@ function getDashboardStats() {
  * @return string|null Relative path ke file atau null jika gagal
  */
 function uploadImage($file, $folder = 'uploads') {
-    // Cek apakah file benar-benar terupload tanpa error
-    if (!isset($file['name']) || $file['error'] !== UPLOAD_ERR_OK) {
+    // Fail closed: require a real, successful HTTP upload with a sensible size.
+    if (!is_array($file)
+        || !isset($file['name'], $file['tmp_name'], $file['error'], $file['size'])
+        || (int)$file['error'] !== UPLOAD_ERR_OK
+        || !is_string($file['tmp_name'])
+        || $file['tmp_name'] === ''
+        || !is_uploaded_file($file['tmp_name'])) {
         return null;
     }
-    
-    $uploadDir = __DIR__ . '/../' . $folder . '/';
-    if (!is_dir($uploadDir)) {
-        if (!mkdir($uploadDir, 0755, true)) {
-            error_log("Failed to create upload directory: $uploadDir");
-            return null;
-        }
-    }
-    
-    // Validasi ekstensi
-    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'ico'];
-    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    
-    if (!in_array($ext, $allowed, true)) {
-        error_log("Upload failed: Invalid extension - $ext");
+
+    $maxSize = defined('UPLOAD_MAX_SIZE') ? (int)UPLOAD_MAX_SIZE : 5242880;
+    if ($maxSize <= 0 || (int)$file['size'] <= 0 || (int)$file['size'] > $maxSize) {
+        error_log('Upload rejected: invalid or excessive file size.');
         return null;
     }
-    
-    // Validasi ukuran (max 5MB)
-    $maxSize = defined('UPLOAD_MAX_SIZE') ? UPLOAD_MAX_SIZE : 5242880;
-    if ($file['size'] > $maxSize) {
-        error_log("Upload failed: File too large - " . $file['size'] . " bytes");
+
+    // Accept only formats whose content can be safely identified as raster images.
+    // SVG is excluded because active SVG content can execute script on the same origin.
+    $ext = strtolower(pathinfo(basename((string)$file['name']), PATHINFO_EXTENSION));
+    $mime = UploadValidation::validatedRasterImageMime(
+        $file['tmp_name'],
+        $ext,
+        (int)$file['size'],
+        $maxSize,
+        40000000
+    );
+    if ($mime === null) {
+        error_log('Upload rejected: invalid image content, MIME, size, extension, or dimensions.');
         return null;
     }
-    
-    // Validasi MIME type (untuk image)
-    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
-        
-        $allowedMimes = [
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp'
-        ];
-        
-        if (isset($allowedMimes[$ext]) && $allowedMimes[$ext] !== $mime) {
-            error_log("Upload failed: MIME type mismatch - expected {$allowedMimes[$ext]}, got $mime");
-            return null;
-        }
+
+    // Folder is an internal relative path; reject traversal and unusual path characters.
+    $folder = trim((string)$folder, '/');
+    if ($folder === ''
+        || !preg_match('~^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$~', $folder)) {
+        error_log('Upload rejected: invalid destination folder.');
+        return null;
     }
-    
-    // Generate unique filename
-    $filename = uniqid('img_', true) . '_' . time() . '.' . $ext;
-    $target = $uploadDir . $filename;
-    
-    // Move file
-    if (move_uploaded_file($file['tmp_name'], $target)) {
-        @chmod($target, 0644);
-        
-        // ===== PHASE 2: AUTO OPTIMIZE IMAGE =====
-        $optFile = __DIR__ . '/ImageOptimizer.php';
-        if (file_exists($optFile)) {
-            require_once $optFile;
-            $optResult = ImageOptimizer::optimize($target);
-            
-            if ($optResult && ($optResult['success'] ?? false) && defined('APP_DEBUG') && APP_DEBUG) {
-                error_log(sprintf(
-                    "Image optimized: %s (%s → %s, hemat %s%%)",
-                    $filename,
-                    formatFileSize($optResult['original_size'] ?? 0),
-                    formatFileSize($optResult['optimized_size'] ?? 0),
-                    $optResult['savings_percent'] ?? 0
-                ));
+
+    $projectRoot = realpath(__DIR__ . '/..');
+    if ($projectRoot === false) {
+        return null;
+    }
+    $uploadDir = $projectRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+    if (!is_dir($uploadDir) && !@mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+        error_log('Upload rejected: destination directory could not be created.');
+        return null;
+    }
+    $realUploadDir = realpath($uploadDir);
+    if ($realUploadDir === false
+        || ($realUploadDir !== $projectRoot
+            && strpos($realUploadDir, $projectRoot . DIRECTORY_SEPARATOR) !== 0)) {
+        error_log('Upload rejected: destination directory escapes project root.');
+        return null;
+    }
+
+    try {
+        $filename = 'img_' . bin2hex(random_bytes(16)) . '.' . $ext;
+    } catch (Throwable $e) {
+        error_log('Upload rejected: secure filename generation failed.');
+        return null;
+    }
+    $target = $realUploadDir . DIRECTORY_SEPARATOR . $filename;
+
+    if (!move_uploaded_file($file['tmp_name'], $target)) {
+        error_log('Upload rejected: unable to move uploaded file.');
+        return null;
+    }
+
+    @chmod($target, 0644);
+
+    // Optimize only after strict image validation has passed.
+    $optFile = __DIR__ . '/ImageOptimizer.php';
+    if ($ext !== 'ico' && is_file($optFile)) {
+        require_once $optFile;
+        if (class_exists('ImageOptimizer')) {
+            try {
+                $optResult = ImageOptimizer::optimize($target);
+                if ($optResult && ($optResult['success'] ?? false) && defined('APP_DEBUG') && APP_DEBUG) {
+                    error_log(sprintf(
+                        'Image optimized: %s (%s -> %s, saved %s%%)',
+                        $filename,
+                        formatFileSize($optResult['original_size'] ?? 0),
+                        formatFileSize($optResult['optimized_size'] ?? 0),
+                        $optResult['savings_percent'] ?? 0
+                    ));
+                }
+            } catch (Throwable $e) {
+                // The validated original image is still usable if optimization fails.
+                error_log('Image optimization failed: ' . $e->getMessage());
             }
         }
-        
-        return $folder . '/' . $filename;
     }
-    
-    error_log("Upload failed: move_uploaded_file failed");
-    return null;
+
+    return $folder . '/' . $filename;
 }
 
 /**
@@ -516,16 +538,81 @@ function uploadImage($file, $folder = 'uploads') {
  * @param string $path Relative path ke file
  * @return bool True jika berhasil
  */
-function deleteUploadedFile($path) {
-    if (empty($path)) return false;
-    
-    $fullPath = __DIR__ . '/../' . $path;
-    
-    if (file_exists($fullPath)) {
-        return @unlink($fullPath);
+function deleteUploadedFile($path, $fallbackFolder = null) {
+    if (!is_string($path) || trim($path) === '') {
+        return false;
     }
-    
-    return false;
+
+    $relative = str_replace('\\\\', '/', trim($path));
+    if (strpos($relative, chr(0)) !== false || strpos($relative, '\\') !== false
+        || preg_match('~^(?:/|[A-Za-z]:)|(?:^|/)\\.\\.?(?:/|$)|//~', $relative)) {
+        return false;
+    }
+
+    // Media library stores "media/name.ext"; uploaded-image helpers store "uploads/...".
+    if (strpos($relative, 'media/') === 0) {
+        $relative = 'uploads/' . $relative;
+    } elseif (strpos($relative, 'uploads/') !== 0) {
+        // Legacy rows may store only a basename; map it into a caller-provided upload folder.
+        if (!is_string($fallbackFolder)
+            || strpos($fallbackFolder, 'uploads/') !== 0
+            || basename($relative) !== $relative
+            || !preg_match('~^uploads(?:/[A-Za-z0-9_-]+)*$~', $fallbackFolder)) {
+            return false;
+        }
+        $relative = rtrim($fallbackFolder, '/') . '/' . $relative;
+    }
+
+    if (!preg_match('~^uploads/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_.-]+)*$~', $relative)) {
+        return false;
+    }
+
+    $projectRoot = realpath(__DIR__ . '/..');
+    $uploadRoot = $projectRoot !== false ? realpath($projectRoot . DIRECTORY_SEPARATOR . 'uploads') : false;
+    if ($projectRoot === false || $uploadRoot === false) {
+        return false;
+    }
+
+    $fullPath = realpath($projectRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
+    if ($fullPath === false
+        || !is_file($fullPath)
+        || strpos($fullPath, $uploadRoot . DIRECTORY_SEPARATOR) !== 0) {
+        return false;
+    }
+
+    return @unlink($fullPath);
+}
+
+/**
+ * Fetch an existing uploaded-file reference from the database, not from a hidden form field.
+ * Table/column names are restricted to this explicit allowlist.
+ */
+function getExistingUploadPath(PDO $db, string $table, string $column, int $id): ?string {
+    $allowed = [
+        'agenda' => ['gambar'],
+        'berita' => ['gambar'],
+        'dosen' => ['foto'],
+        'galeri' => ['gambar'],
+        'fasilitas' => ['gambar'],
+        'prestasi' => ['gambar'],
+        'mitra' => ['logo'],
+        'alumni' => ['foto'],
+        'testimoni' => ['avatar'],
+    ];
+
+    if ($id <= 0 || !isset($allowed[$table]) || !in_array($column, $allowed[$table], true)) {
+        throw new InvalidArgumentException('Referensi berkas unggahan tidak valid.');
+    }
+
+    $stmt = $db->prepare("SELECT `{$column}` FROM `{$table}` WHERE id = ? LIMIT 1");
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        throw new RuntimeException('Data yang akan diperbarui tidak ditemukan.');
+    }
+
+    $path = $row[$column] ?? null;
+    return is_string($path) && $path !== '' ? $path : null;
 }
 
 /* ============================================================

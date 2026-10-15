@@ -113,8 +113,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT foto FROM alumni WHERE id = ?");
             $stmt->execute([$id]);
             $row = $stmt->fetch();
-            if ($row && $row['foto'] && file_exists(__DIR__ . '/../uploads/' . $row['foto'])) {
-                unlink(__DIR__ . '/../uploads/' . $row['foto']);
+            if (!empty($row['foto'])) {
+                deleteUploadedFile((string)$row['foto'], 'uploads/alumni');
             }
             $db->prepare("DELETE FROM alumni WHERE id = ?")->execute([$id]);
             setFlash('success', 'Data alumni berhasil dihapus');
@@ -144,8 +144,8 @@ if (isset($_GET['action']) && $db) {
             $stmt = $db->prepare("SELECT foto FROM alumni WHERE id IN ($placeholders)");
             $stmt->execute($ids);
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['foto'] && file_exists(__DIR__ . '/../uploads/' . $row['foto'])) {
-                    unlink(__DIR__ . '/../uploads/' . $row['foto']);
+                if (!empty($row['foto'])) {
+                    deleteUploadedFile((string)$row['foto'], 'uploads/alumni');
                 }
             }
             
@@ -178,6 +178,8 @@ if (isset($_GET['action']) && $db) {
 /* ===== HANDLE FORM SUBMIT ===== */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
     try {
+        $newImageUploaded = null;
+        $existingImagePath = null;
         $id = isset($_POST['id']) && $_POST['id'] ? (int)$_POST['id'] : null;
         $nama = clean($_POST['nama']);
         $email = clean($_POST['email'] ?? '');
@@ -193,13 +195,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
         $status = clean($_POST['status'] ?? 'aktif');
         $is_featured = isset($_POST['is_featured']) ? 1 : 0;
         
-        $foto = $_POST['foto_lama'] ?? null;
+        $existingImagePath = $id ? getExistingUploadPath($db, 'alumni', 'foto', $id) : null;
+        $foto = $existingImagePath;
         if (!empty($_FILES['foto']['name'])) {
             $newImage = uploadImage($_FILES['foto'], 'uploads/alumni');
-            if ($newImage) {
-                if ($foto && file_exists(__DIR__ . '/../' . $foto)) unlink(__DIR__ . '/../' . $foto);
-                $foto = $newImage;
+            if (!$newImage) {
+                throw new RuntimeException('Gagal memvalidasi foto alumni.');
             }
+            $newImageUploaded = $newImage;
+            $foto = $newImage;
         }
         
         if ($id) {
@@ -211,7 +215,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $db) {
             $stmt->execute([$nama, $email, $telepon, $tahun_lulus, $ipk, $pekerjaan, $perusahaan, $kota, $linkedin, $instagram, $quote, $status, $is_featured, $foto]);
             setFlash('success', 'Alumni baru berhasil ditambahkan');
         }
+        if ($newImageUploaded !== null) {
+            if ($existingImagePath !== null && $existingImagePath !== $foto) {
+                deleteUploadedFile((string)$existingImagePath, 'uploads/alumni');
+            }
+            $newImageUploaded = null;
+        }
     } catch (Throwable $e) {
+        if ($newImageUploaded !== null) {
+            deleteUploadedFile((string)$newImageUploaded, 'uploads/alumni');
+        }
         setFlash('error', 'Gagal menyimpan data: ' . $e->getMessage());
     }
     header('Location: alumni.php');
@@ -931,6 +944,7 @@ $employmentRate = $totalAlumni > 0 ? round(($workingCount / $totalAlumni) * 100)
         </div>
         
         <form method="POST" enctype="multipart/form-data" id="alumniForm" class="modal-body">
+<input type="hidden" name="csrf_token" value="<?= htmlspecialchars(generateCSRF(), ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="id" id="formId">
             <input type="hidden" name="foto_lama" id="fotoLama">
             
@@ -3542,7 +3556,7 @@ $employmentRate = $totalAlumni > 0 ? round(($workingCount / $totalAlumni) * 100)
         if (!confirm(messages[action])) return;
         
         const ids = Array.from(selectedIds).join(',');
-        window.location.href = `?action=${action}&ids=${ids}`;
+        window.adminSecureAction(`?action=${action}&ids=${ids}`);
     };
 
     /* ===== EXPORT CSV (Real Implementation) ===== */
