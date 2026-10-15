@@ -1026,21 +1026,21 @@ result = nlp.predict(<span class="qn-code-str">"Hello, Informatika!"</span>)
                         <div class="qn-contact-icon"><i class="fas fa-map-marker-alt"></i></div>
                         <div>
                             <span class="qn-contact-label">LOCATION</span>
-                            <span class="qn-contact-value"><?= clean(getSetting('alamat', 'Jl. Informatika No. 1, Jakarta')) ?></span>
+                            <span class="qn-contact-value"><?= clean(getSetting('contact_address', getSetting('alamat', 'Jl. Informatika No. 1, Jakarta'))) ?></span>
                         </div>
                     </div>
                     <div class="qn-contact-item">
                         <div class="qn-contact-icon"><i class="fas fa-envelope"></i></div>
                         <div>
                             <span class="qn-contact-label">EMAIL</span>
-                            <span class="qn-contact-value"><?= clean(getSetting('email', 'info@informatikapro.ac.id')) ?></span>
+                            <span class="qn-contact-value"><?= clean(getSetting('contact_email', getSetting('email', 'info@informatikapro.ac.id'))) ?></span>
                         </div>
                     </div>
                     <div class="qn-contact-item">
                         <div class="qn-contact-icon"><i class="fab fa-whatsapp"></i></div>
                         <div>
                             <span class="qn-contact-label">WHATSAPP</span>
-                            <span class="qn-contact-value">+<?= clean(getSetting('whatsapp', '6281234567890')) ?></span>
+                            <span class="qn-contact-value">+<?= clean(getSetting('contact_whatsapp', getSetting('whatsapp', '6281234567890'))) ?></span>
                         </div>
                     </div>
                 </div>

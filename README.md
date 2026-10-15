@@ -60,9 +60,15 @@ Website resmi Program Studi Informatika dengan panel administrasi modern dan sis
 git clone https://github.com/yolislibmanmof/prodi-informatika.git
 cd prodi-informatika
 
-# Import database
-phpmyadmin → import database/schema.sql
+# 1. Import database/schema.sql melalui phpMyAdmin atau MySQL CLI.
 
-# Konfigurasi
+# 2. Salin template konfigurasi (jangan commit file .env)
 cp .env.example .env
-# Edit .env: DB credentials, APP_ENV=production
+# Edit .env: SITE_URL, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS.
+# Gunakan user database khusus aplikasi, bukan root, untuk production.
+
+# 3. Buat akun superadmin dengan password acak satu kali
+php database/create-admin.php
+# Simpan password yang dicetak terminal secara aman. Tidak ada akun/password default.
+
+# Pastikan PHP dapat menulis folder logs/, cache/, dan uploads/ sesuai kebutuhan server.

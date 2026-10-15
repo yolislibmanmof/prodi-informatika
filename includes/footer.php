@@ -11,16 +11,16 @@ try {
     $statAkreditasi = getSetting('akreditasi', 'A');
     
     // Ambil link sosial dinamis
-    $sosialIg = getSetting('instagram', '#');
+    $sosialIg = getSetting('social_instagram', getSetting('instagram', '#'));
     $sosialYt = getSetting('youtube', '#');
-    $sosialLn = getSetting('linkedin', '#');
+    $sosialLn = getSetting('social_linkedin', getSetting('linkedin', '#'));
     
     // Data kontak dinamis
-    $kontakEmail = getSetting('email', 'info@informatikapro.ac.id');
-    $kontakTelp = getSetting('telepon', '(021) 1234-5678');
-    $kontakAlamat = getSetting('alamat', 'Jl. Informatika No. 1, Jakarta');
+    $kontakEmail = getSetting('contact_email', getSetting('email', 'info@informatikapro.ac.id'));
+    $kontakTelp = getSetting('contact_phone', getSetting('telepon', '(021) 1234-5678'));
+    $kontakAlamat = getSetting('contact_address', getSetting('alamat', 'Jl. Informatika No. 1, Jakarta'));
     $kontakJam = getSetting('jam_layanan', 'Senin - Jumat, 08.00 - 16.00 WIB');
-    $kontakWa = getSetting('whatsapp', '6281234567890');
+    $kontakWa = getSetting('contact_whatsapp', getSetting('whatsapp', '6281234567890'));
 } catch (Throwable $e) {
     $statMahasiswa = '518+'; $statPublikasi = '158+'; $statDosen = '25+'; $statAkreditasi = 'A';
     $sosialIg = $sosialYt = $sosialLn = '#';

@@ -66,7 +66,7 @@ class Database {
         $this->conn = null;
         
         try {
-            $dsn = "mysql:host={$this->host};dbname={$this->db_name};charset={$this->charset}";
+            $dsn = "mysql:host={$this->host};port=" . (defined("DB_PORT") ? (int) DB_PORT : 3306) . ";dbname={$this->db_name};charset={$this->charset}";
             
             // PDO options untuk security dan performance
             $options = [
@@ -83,7 +83,8 @@ class Database {
             $this->conn->setAttribute(PDO::ATTR_TIMEOUT, 5);
             
             // Set session variables untuk MySQL
-            $this->conn->exec("SET time_zone = '+07:00'"); // WIB
+            $dbTimezone = date('P'); // Follow APP_TIMEZONE (e.g. Asia/Makassar = +08:00)
+            $this->conn->exec("SET time_zone = '" . $dbTimezone . "'");
             $this->conn->exec("SET sql_mode = 'STRICT_ALL_TABLES'");
             
             return $this->conn;
