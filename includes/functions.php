@@ -8,6 +8,7 @@
  * - Enhanced security validation
  * - Better error handling
  * - Additional helper functions
+ * - Cache invalidation untuk sinkronisasi admin-publik
  */
 
 // Pastikan database.php sudah di-load
@@ -121,6 +122,8 @@ function cacheForget($key) {
 
 /**
  * Hapus cache dengan pattern (semua cache yang key-nya mengandung string)
+ * Hanya menghapus cache yang memiliki metadata key yang valid
+ * 
  * @param string $pattern Pattern untuk match (contoh: 'berita_')
  */
 function cacheForgetPattern($pattern) {
@@ -129,11 +132,13 @@ function cacheForgetPattern($pattern) {
 
     foreach (glob($cacheDir . '/*.cache') ?: [] as $file) {
         $raw = @file_get_contents($file);
-        $entry = $raw === false ? false : @unserialize($raw, ['allowed_classes' => false]);
-
-        // Older cache files have no key metadata: remove them safely during invalidation.
-        $key = is_array($entry) ? ($entry['key'] ?? null) : null;
-        if (!is_string($key) || stripos($key, (string)$pattern) !== false) {
+        if ($raw === false) continue;
+        
+        $entry = @unserialize($raw, ['allowed_classes' => false]);
+        if (!is_array($entry)) continue; // Skip corrupted files
+        
+        $key = $entry['key'] ?? null;
+        if (is_string($key) && stripos($key, (string)$pattern) !== false) {
             @unlink($file);
         }
     }
@@ -375,8 +380,10 @@ function updateViews($id) {
     $stmt = $db->prepare("UPDATE berita SET views = views + 1 WHERE id = ?");
     $stmt->execute([(int)$id]);
     
-    // Invalidate cache untuk berita ini
-    // (kita tidak cache individual berita untuk simplicity)
+    // ✅ Invalidate cache untuk berita ini dan homepage
+    cacheForget('berita_id_' . $id);
+    cacheForgetPattern('home_news_');
+    cacheForgetPattern('berita_slug_');
 }
 
 /**
@@ -459,23 +466,35 @@ function uploadImage($file, $folder = 'uploads') {
         return null;
     }
     
-    // Validasi MIME type (untuk image)
-    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
+    // Validasi MIME type (untuk semua format gambar termasuk SVG)
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+    
+    $allowedMimes = [
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'svg' => 'image/svg+xml',
+        'ico' => ['image/x-icon', 'image/vnd.microsoft.icon']
+    ];
+    
+    if (isset($allowedMimes[$ext])) {
+        $expectedMime = $allowedMimes[$ext];
         
-        $allowedMimes = [
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'gif' => 'image/gif',
-            'webp' => 'image/webp'
-        ];
-        
-        if (isset($allowedMimes[$ext]) && $allowedMimes[$ext] !== $mime) {
-            error_log("Upload failed: MIME type mismatch - expected {$allowedMimes[$ext]}, got $mime");
-            return null;
+        // Handle multiple allowed mimes (untuk ico)
+        if (is_array($expectedMime)) {
+            if (!in_array($mime, $expectedMime, true)) {
+                error_log("Upload failed: MIME type mismatch - expected " . implode(' or ', $expectedMime) . ", got $mime");
+                return null;
+            }
+        } else {
+            if ($expectedMime !== $mime) {
+                error_log("Upload failed: MIME type mismatch - expected {$expectedMime}, got $mime");
+                return null;
+            }
         }
     }
     
@@ -623,6 +642,171 @@ if (!function_exists('getBeritaImage')) {
         // File tidak ada, return fallback
         return $fallback;
     }
+}
+
+/* ============================================================
+   8.5 ALUMNI & MITRA HELPERS (dengan caching)
+============================================================ */
+
+/**
+ * Get IPK label dengan color-coding
+ * @param float $ipk Nilai IPK
+ * @return array|null Array dengan label, color, bg, icon atau null
+ */
+function getIpkLabel($ipk) {
+    if (!is_numeric($ipk) || $ipk <= 0) return null;
+    
+    if ($ipk >= 3.51) return ['label' => 'Cumlaude', 'color' => '#F59E0B', 'bg' => 'rgba(245,158,11,0.12)', 'icon' => 'fa-crown'];
+    if ($ipk >= 3.01) return ['label' => 'Sangat Baik', 'color' => '#10B981', 'bg' => 'rgba(16,185,129,0.12)', 'icon' => 'fa-star'];
+    if ($ipk >= 2.76) return ['label' => 'Baik', 'color' => '#3B82F6', 'bg' => 'rgba(59,130,246,0.12)', 'icon' => 'fa-check-circle'];
+    if ($ipk >= 2.00) return ['label' => 'Cukup', 'color' => '#6B7280', 'bg' => 'rgba(107,114,128,0.12)', 'icon' => 'fa-circle'];
+    
+    return null;
+}
+
+/**
+ * Get alumni dengan filter dan caching
+ * @param array $filters Array filter (status, tahun_lulus, ipk_range, kota, is_featured)
+ * @param int|null $limit Limit hasil (null = semua)
+ * @return array Array of alumni
+ */
+function getAlumni($filters = [], $limit = null) {
+    $cacheKey = 'alumni_' . md5(serialize($filters) . ($limit ?? 'all'));
+    
+    return cache($cacheKey, 300, function() use ($filters, $limit) {
+        $db = getDB();
+        
+        $where = ["status = 'aktif'"];
+        $params = [];
+        
+        if (isset($filters['status']) && $filters['status']) {
+            $where[] = "status = ?";
+            $params[] = $filters['status'];
+        }
+        
+        if (isset($filters['tahun_lulus']) && $filters['tahun_lulus'] > 0) {
+            $where[] = "tahun_lulus = ?";
+            $params[] = (int)$filters['tahun_lulus'];
+        }
+        
+        if (isset($filters['ipk_range']) && $filters['ipk_range']) {
+            switch ($filters['ipk_range']) {
+                case 'cumlaude':
+                    $where[] = "ipk >= 3.51 AND ipk <= 4.00";
+                    break;
+                case 'sangat_baik':
+                    $where[] = "ipk >= 3.01 AND ipk < 3.51";
+                    break;
+                case 'baik':
+                    $where[] = "ipk >= 2.76 AND ipk < 3.01";
+                    break;
+            }
+        }
+        
+        if (isset($filters['kota']) && $filters['kota']) {
+            $where[] = "kota = ?";
+            $params[] = $filters['kota'];
+        }
+        
+        if (isset($filters['is_featured']) && $filters['is_featured']) {
+            $where[] = "is_featured = 1";
+        }
+        
+        $sql = "SELECT * FROM alumni WHERE " . implode(' AND ', $where) . " ORDER BY tahun_lulus DESC, nama ASC";
+        
+        if ($limit) {
+            $sql .= " LIMIT " . (int)$limit;
+        }
+        
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    });
+}
+
+/**
+ * Get alumni statistics dengan caching
+ * @return array Array dengan total, working, featured, avg_ipk, cities
+ */
+function getAlumniStats() {
+    return cache('alumni_stats', 300, function() {
+        $db = getDB();
+        
+        return [
+            'total' => (int)$db->query("SELECT COUNT(*) FROM alumni WHERE status='aktif'")->fetchColumn(),
+            'working' => (int)$db->query("SELECT COUNT(*) FROM alumni WHERE status='aktif' AND perusahaan != '' AND perusahaan IS NOT NULL")->fetchColumn(),
+            'featured' => (int)$db->query("SELECT COUNT(*) FROM alumni WHERE is_featured=1 AND status='aktif'")->fetchColumn(),
+            'avg_ipk' => (float)$db->query("SELECT AVG(ipk) FROM alumni WHERE ipk IS NOT NULL AND ipk > 0 AND status='aktif'")->fetchColumn(),
+            'cities' => (int)$db->query("SELECT COUNT(DISTINCT kota) FROM alumni WHERE kota != '' AND kota IS NOT NULL AND status='aktif'")->fetchColumn()
+        ];
+    });
+}
+
+/**
+ * Get unique tahun lulus untuk filter
+ * @return array Array of years
+ */
+function getAlumniYears() {
+    return cache('alumni_years', 3600, function() {
+        $db = getDB();
+        return $db->query("SELECT DISTINCT tahun_lulus FROM alumni WHERE tahun_lulus IS NOT NULL AND status='aktif' ORDER BY tahun_lulus DESC")->fetchAll(PDO::FETCH_COLUMN);
+    });
+}
+
+/**
+ * Get unique kota untuk filter
+ * @return array Array of cities
+ */
+function getAlumniKota() {
+    return cache('alumni_kota', 3600, function() {
+        $db = getDB();
+        return $db->query("SELECT DISTINCT kota FROM alumni WHERE kota != '' AND kota IS NOT NULL AND status='aktif' ORDER BY kota")->fetchAll(PDO::FETCH_COLUMN);
+    });
+}
+
+/**
+ * Get mitra dengan filter dan caching
+ * @param array $filters Array filter (status, jenis)
+ * @return array Array of mitra
+ */
+function getMitra($filters = []) {
+    $cacheKey = 'mitra_' . md5(serialize($filters));
+    
+    return cache($cacheKey, 300, function() use ($filters) {
+        $db = getDB();
+        
+        $where = ["status = 'aktif'"];
+        $params = [];
+        
+        if (isset($filters['jenis']) && $filters['jenis']) {
+            $where[] = "jenis = ?";
+            $params[] = $filters['jenis'];
+        }
+        
+        $sql = "SELECT * FROM mitra WHERE " . implode(' AND ', $where) . " ORDER BY urutan ASC, nama ASC";
+        
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    });
+}
+
+/**
+ * Get mitra statistics dengan caching
+ * @return array Array dengan total, per jenis
+ */
+function getMitraStats() {
+    return cache('mitra_stats', 300, function() {
+        $db = getDB();
+        
+        return [
+            'total' => (int)$db->query("SELECT COUNT(*) FROM mitra WHERE status='aktif'")->fetchColumn(),
+            'industri' => (int)$db->query("SELECT COUNT(*) FROM mitra WHERE jenis='industri' AND status='aktif'")->fetchColumn(),
+            'universitas' => (int)$db->query("SELECT COUNT(*) FROM mitra WHERE jenis='universitas' AND status='aktif'")->fetchColumn(),
+            'pemerintah' => (int)$db->query("SELECT COUNT(*) FROM mitra WHERE jenis='pemerintah' AND status='aktif'")->fetchColumn(),
+            'komunitas' => (int)$db->query("SELECT COUNT(*) FROM mitra WHERE jenis='komunitas' AND status='aktif'")->fetchColumn()
+        ];
+    });
 }
 
 /* ============================================================

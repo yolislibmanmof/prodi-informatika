@@ -82,10 +82,11 @@ class Database {
             $this->conn = new PDO($dsn, $this->username, $this->password, $options);
             $this->conn->setAttribute(PDO::ATTR_TIMEOUT, 5);
             
-            // Set session variables untuk MySQL
-            $dbTimezone = date('P'); // Follow APP_TIMEZONE (e.g. Asia/Makassar = +08:00)
-            $this->conn->exec("SET time_zone = '" . $dbTimezone . "'");
-            $this->conn->exec("SET sql_mode = 'STRICT_ALL_TABLES'");
+// ✅ Ambil timezone dari config, convert ke offset
+$appTimezone = defined('APP_TIMEZONE') ? APP_TIMEZONE : 'Asia/Jakarta';
+$dateTime = new DateTime('now', new DateTimeZone($appTimezone));
+$dbTimezone = $dateTime->format('P'); // +08:00
+$this->conn->exec("SET time_zone = '" . $dbTimezone . "'");
             
             return $this->conn;
             

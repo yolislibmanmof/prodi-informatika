@@ -85,7 +85,7 @@ define('DB_HOST', env('DB_HOST', 'localhost'));
 define('DB_NAME', env('DB_NAME', 'prodi-informatika'));
 define('DB_USER', env('DB_USER', APP_ENV === 'development' ? 'root' : ''));
 define('DB_PASS', env('DB_PASS', ''));
-define('DB_PORT', env('DB_PORT', 3306));
+define('DB_PORT', (int) env('DB_PORT', 3306));
 define('DB_CHARSET', 'utf8mb4');
 
 // Fail closed when the production configuration has not been provided.

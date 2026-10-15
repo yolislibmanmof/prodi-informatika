@@ -4,12 +4,13 @@ $isHome = $currentPage === 'index.php' || $currentPage === '';
 
 // Helper untuk highlight menu parent saat berada di halaman child
 $activeProfil = in_array($currentPage, ['sambutan-kaprodi.php', 'kurikulum.php', 'prospek-karir.php', 'dosen.php', 'fasilitas.php']);
-$activeAkademik = in_array($currentPage, ['faq.php', 'dokumen.php', 'agenda.php']);
+$activeAkademik = in_array($currentPage, ['faq.php', 'dokumen.php', 'agenda.php', 'konsentrasi.php']);
 $activeInformasi = in_array($currentPage, ['berita.php', 'berita-detail.php', 'pengumuman.php', 'galeri.php', 'testimoni.php', 'prestasi.php']);
 ?>
 
 <!-- ============================================================
-     AURORA COMMAND CENTER NAVBAR
+     AURORA COMMAND CENTER NAVBAR - FINAL VERSION
+     Sinkron dengan Admin Panel v4.0
 ============================================================ -->
 <nav class="nb-navbar" id="navbar" role="navigation" aria-label="Menu utama">
     <!-- Aurora Background -->
@@ -259,6 +260,14 @@ $activeInformasi = in_array($currentPage, ['berita.php', 'berita-detail.php', 'p
                     <i class="fas fa-moon nb-theme-icon" id="nbThemeIcon"></i>
                 </button>
 
+                <!-- Admin Panel Button - SINKRONISASI -->
+                <a href="<?= SITE_URL ?>/admin/login.php" class="nb-admin-btn" role="menuitem" title="Panel Admin">
+                    <span class="nb-admin-content">
+                        <i class="fas fa-lock"></i>
+                        <span>Admin</span>
+                    </span>
+                </a>
+
                 <!-- CTA Button -->
                 <a href="<?= SITE_URL ?>/daftar.php" class="nb-cta" role="menuitem">
                     <span class="nb-cta-content">
@@ -415,6 +424,7 @@ $activeInformasi = in_array($currentPage, ['berita.php', 'berita-detail.php', 'p
                     'dokumen.php' => 'Dokumen & Unduhan',
                     'prestasi.php' => 'Prestasi Mahasiswa',
                     'fasilitas.php' => 'Fasilitas & Laboratorium',
+                    'konsentrasi.php' => 'Kelompok Keahlian',
                 ];
                 echo $names[$currentPage] ?? ucwords(str_replace(['.php', '-', '_'], [' ', ' ', ' '], $currentPage));
                 ?>
@@ -428,7 +438,7 @@ $activeInformasi = in_array($currentPage, ['berita.php', 'berita-detail.php', 'p
 <main id="main-content">
 
 <!-- ============================================================
-     AURORA COMMAND CENTER STYLES
+     AURORA COMMAND CENTER STYLES - FINAL
 ============================================================ -->
 <style>
 /* ===== NAVBAR BASE ===== */
@@ -699,6 +709,34 @@ body.gl-dark .nb-di-title { color: #F1F5F9; }
 .nb-actions {
     display: flex; align-items: center; gap: 10px;
     list-style: none;
+}
+
+/* Admin Button - BARU */
+.nb-admin-btn {
+    position: relative; display: inline-flex;
+    align-items: center; gap: 8px;
+    padding: 10px 18px;
+    background: rgba(107, 114, 128, 0.1);
+    border: 1px solid rgba(107, 114, 128, 0.2);
+    color: #6B7280; border-radius: 12px;
+    font-weight: 600; font-size: 0.88rem;
+    text-decoration: none; overflow: hidden;
+    transition: all 0.3s;
+}
+.nb-admin-btn:hover {
+    background: rgba(107, 114, 128, 0.15);
+    border-color: #6B7280;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(107, 114, 128, 0.15);
+}
+body.gl-dark .nb-admin-btn {
+    background: rgba(107, 114, 128, 0.08);
+    border-color: rgba(107, 114, 128, 0.3);
+    color: #9CA3AF;
+}
+.nb-admin-content {
+    display: flex; align-items: center; gap: 8px;
+    position: relative; z-index: 1;
 }
 
 /* Search Trigger */
@@ -1015,6 +1053,7 @@ body.gl-dark .nb-breadcrumb {
     .nb-search-trigger { width: 100%; justify-content: center; }
     .nb-theme-toggle { display: none; }
     .nb-cta { width: 100%; justify-content: center; }
+    .nb-admin-btn { width: 100%; justify-content: center; }
     
     .nb-link { padding: 14px 16px; font-size: 1rem; }
     .nb-link-icon { display: none; }
@@ -1040,7 +1079,7 @@ body.gl-dark .nb-breadcrumb {
 </style>
 
 <!-- ============================================================
-     AURORA COMMAND CENTER SCRIPTS
+     AURORA COMMAND CENTER SCRIPTS - FINAL
 ============================================================ -->
 <script>
 (function() {
